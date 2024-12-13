@@ -13,15 +13,22 @@ pipeline {
         git branch: 'main', url: 'git@github.com:satishgonella2024/wordpress-app-deployment.git'
       }
     }
-
-    stage('Build Docker Image') {
-      steps {
-        sh '''
-        docker build -t your-dockerhub-username/wordpress:latest .
-        docker login -u $DOCKER_CREDENTIALS_USR -p $DOCKER_CREDENTIALS_PSW
-        docker push your-dockerhub-username/wordpress:latest
-        '''
-      }
+    stage('Dockerize') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-hub-credentials',
+                    passwordVariable: 'DOCKER_PASSWORD',
+                    usernameVariable: 'DOCKER_USERNAME'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                        docker build -t satish2024/wordpress:latest .
+                        docker push satish2024/wordpress:latest
+                        docker logout
+                    '''
+                }
+            }
+        }
     }
 
     stage('Deploy Application') {
@@ -29,8 +36,8 @@ pipeline {
         sshagent(['ec2-instance-ssh-key']) {
           sh '''
           ssh -o StrictHostKeyChecking=no ec2-user@<ec2-public-ip> << EOF
-          docker pull your-dockerhub-username/wordpress:latest
-          docker run -d -p 80:80 --name wordpress your-dockerhub-username/wordpress:latest
+          docker pull satish2024/wordpress:latest
+          docker run -d -p 80:80 --name wordpress satish2024/wordpress:latest
           EOF
           '''
         }
