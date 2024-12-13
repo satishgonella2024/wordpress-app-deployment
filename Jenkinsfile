@@ -14,24 +14,31 @@ pipeline {
             }
         }
 
+       pipeline {
+    agent any
+
+    stages {
         stage('Fetch Infra Artifacts') {
             steps {
                 copyArtifacts(
                     projectName: 'wp-infra-pipeline',
                     filter: 'infra-output.json',
-                    selector: specific('lastSuccessfulBuild')
+                    selector: lastSuccessful()
                 )
                 sh 'cat infra-output.json' // Debugging step
-
                 script {
-                    def infra = readJSON file: 'infra-output.json'
+                    def jsonFileContent = readFile('infra-output.json').trim() // Trim extra spaces
+                    echo "Raw JSON Content: ${jsonFileContent}" // Debugging step
+                    def infra = readJSON text: jsonFileContent
                     env.APP_DNS = infra.app_dns
                     env.APP_PORT = infra.app_port
                 }
             }
         }
+    }
 
-        stage('Dockerize') {
+
+    stage('Dockerize') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-hub-credentials',
