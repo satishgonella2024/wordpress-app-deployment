@@ -14,10 +14,7 @@ pipeline {
             }
         }
 
-       pipeline {
-    agent any
-
-    stages {
+    
         stage('Fetch Infra Artifacts') {
             steps {
                 copyArtifacts(
@@ -35,10 +32,10 @@ pipeline {
                 }
             }
         }
-    }
+    
 
 
-    stage('Dockerize') {
+        stage('Dockerize') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-hub-credentials',
