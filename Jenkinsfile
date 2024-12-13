@@ -1,19 +1,33 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKER_CREDENTIALS = credentials('docker-hub-credentials') // Replace with your DockerHub credentials ID
-    AWS_ACCESS_KEY_ID     = credentials('aws-credentials')
-    AWS_SECRET_ACCESS_KEY = credentials('aws-credentials')
-  }
-
-  stages {
-    stage('Checkout Code') {
-      steps {
-        git branch: 'main', url: 'git@github.com:satishgonella2024/wordpress-app-deployment.git'
-      }
+    environment {
+        DOCKER_CREDENTIALS = credentials('docker-hub-credentials')
     }
-    stage('Dockerize') {
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'git@github.com:satishgonella2024/wordpress-app-deployment.git'
+            }
+        }
+
+        stage('Fetch Infra Artifacts') {
+            steps {
+                copyArtifacts(
+                    projectName: 'wp-infra-pipeline',
+                    filter: 'infra-output.json',
+                    selector: specific('lastSuccessfulBuild')
+                )
+                script {
+                    def infra = readJSON file: 'infra-output.json'
+                    env.APP_DNS = infra.app_dns
+                    env.APP_PORT = infra.app_port
+                }
+            }
+        }
+
+        stage('Dockerize') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-hub-credentials',
@@ -30,32 +44,40 @@ pipeline {
             }
         }
 
-    stage('Deploy Application') {
-      steps {
-        sshagent(['ec2-instance-ssh-key']) {
-          sh '''
-          ssh -o StrictHostKeyChecking=no ec2-user@<ec2-public-ip> << EOF
-          docker pull satish2024/wordpress:latest
-          docker run -d -p 80:80 --name wordpress satish2024/wordpress:latest
-          EOF
-          '''
+        stage('Deploy Application') {
+            steps {
+                sshagent(['ec2-instance-ssh-key']) {
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ec2-user@${APP_DNS} << EOF
+                    docker pull satish2024/wordpress:latest
+                    docker ps -q --filter "name=wordpress" | grep -q . && docker stop wordpress && docker rm wordpress || true
+                    docker run -d -p ${APP_PORT}:${APP_PORT} --name wordpress satish2024/wordpress:latest
+                    EOF
+                    '''
+                }
+            }
         }
-      }
+
+        stage('Post-Deployment Validation') {
+            steps {
+                script {
+                    def status = sh(script: '''
+                        curl -o /dev/null -s -w "%{http_code}" http://${APP_DNS}:${APP_PORT}
+                    ''', returnStdout: true).trim()
+                    if (status != '200') {
+                        error "Post-deployment validation failed! HTTP Status: ${status}"
+                    }
+                }
+            }
+        }
     }
 
-    stage('Post-Deployment Validation') {
-      steps {
-        sh './scripts/validate-deployment.sh'
-      }
+    post {
+        success {
+            echo 'Application deployment successful.'
+        }
+        failure {
+            echo 'Application deployment failed.'
+        }
     }
-  }
-
-  post {
-    success {
-      echo 'WordPress deployment successful.'
-    }
-    failure {
-      echo 'WordPress deployment failed.'
-    }
-  }
 }
