@@ -21,6 +21,8 @@ pipeline {
                     filter: 'infra-output.json',
                     selector: specific('lastSuccessfulBuild')
                 )
+                sh 'cat infra-output.json' // Debugging step
+
                 script {
                     def infra = readJSON file: 'infra-output.json'
                     env.APP_DNS = infra.app_dns
