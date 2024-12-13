@@ -54,7 +54,7 @@ pipeline {
 
         stage('Deploy Application') {
             steps {
-                sshagent(['ec2-instance-ssh-key']) {
+                sshagent(['terraform_wp_key']) {
                     sh '''
                     ssh -o StrictHostKeyChecking=no ec2-user@${APP_DNS} << EOF
                     docker pull satish2024/wordpress:latest
